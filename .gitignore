@@ -1,0 +1,10 @@
+# Binaries
+camera-viewer
+*.exe
+
+# Go
+go.work
+
+# IDE
+.vscode/
+.idea/
