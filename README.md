@@ -86,3 +86,46 @@ The signaling mechanism is **separate** from WebRTC - it's just the handshake. O
   - `joho/godotenv` - Environment variable management
   
 - **Frontend**: React (coming soon)
+
+## **Putting It All Together**
+
+Here's the **complete flow**:
+
+### **Step 1: Setup**
+```
+Go creates WebRTCPeer
+    ↓
+Creates Video Track (the pipe for video)
+    ↓
+Adds track to PeerConnection
+```
+
+### **Step 2: Signaling (next step)**
+```
+Go: "I offer to send H.264 video" (SDP Offer)
+    ↓
+Browser: "I can accept H.264 video" (SDP Answer)
+    ↓
+Both exchange ICE candidates (network paths)
+```
+
+### **Step 3: Connection**
+```
+ICE tests all the candidate paths
+    ↓
+Finds the best one (fastest, most direct)
+    ↓
+WebRTC connection established!
+```
+
+### **Step 4: Streaming (coming next)**
+```
+Camera → RTSP → RTP packets
+    ↓
+Go reads RTP packets
+    ↓
+Go writes RTP packets to Video Track
+    ↓
+Video Track sends to Browser via WebRTC
+    ↓
+Browser displays in <video> element

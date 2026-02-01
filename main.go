@@ -9,6 +9,7 @@ import (
 	"camera-viewer/stream"
 
 	"github.com/joho/godotenv"
+	"github.com/pion/webrtc/v4"
 )
 
 func main() {
@@ -30,11 +31,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to RTSP stream: %v", err)
 	}
+	
+	// Defer is used to close the RTSP stream after the main function exits.
+	defer rtspStream.Close()
 
 	log.Println("Connected to RTSP stream")
 
-	// Defer is used to close the RTSP stream after the main function exits.
-	defer rtspStream.Close()
+	webrtcPeer, err := stream.NewWebRTCPeer()
+	if err != nil {
+		log.Fatalf("Failed to create WebRTC peer: %v", err)
+	}
+	
+	defer webrtcPeer.Close()
+
+	err = webrtcPeer.CreateVideoTrack("video")
+	if err != nil {
+		log.Fatalf("Failed to create video track: %v", err)
+	}
+
+	// Set up connection state monitorung
+	webrtcPeer.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		log.Printf("Connection state changed: %s", state)
+	})
+
+	// Set up ICE candidate handling
+	// When we discover a new way someone can reach us, log it
+	webrtcPeer.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		log.Printf("ICE candidate: %s", candidate.String())
+	})
+	
+	log.Println("WebRTC peer created and ready")
+
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/api/cameras", camerasHandler)
