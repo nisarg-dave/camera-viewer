@@ -8,3 +8,6 @@ go.work
 # IDE
 .vscode/
 .idea/
+
+# Environment variables
+.env
