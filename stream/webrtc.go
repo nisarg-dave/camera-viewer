@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -37,12 +38,13 @@ func NewWebRTCPeer() (*WebRTCPeer, error) {
 }
 
 // CreateVideoTrack creates a video track for sending video to the browser
-func (p *WebRTCPeer) CreateVideoTrack(trackID string) error {
-	// Create a video track
-	// H264 is the codec, 90000 is the clock rate for the video
+// codecMimeType should be either webrtc.MimeTypeH264 or webrtc.MimeTypeH265
+func (p *WebRTCPeer) CreateVideoTrack(trackID string, codecMimeType string) error {
+	// Create a video track with the specified codec
+	// 90000 is the standard clock rate for video
 	// This sends RTP packets over the track to the browser.
 	videoTrack, err := webrtc.NewTrackLocalStaticRTP(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
+		webrtc.RTPCodecCapability{MimeType: codecMimeType},
 		"video", // The track ID is the name of the track
 		"camera-stream", // The track label is the name of the track
 	)
@@ -58,7 +60,7 @@ func (p *WebRTCPeer) CreateVideoTrack(trackID string) error {
 		return fmt.Errorf("failed to add video track to peer connection: %w", err)
 	}
 
-	log.Println("Video track created and added to peer connection")
+	log.Printf("Video track created with codec %s and added to peer connection", codecMimeType)
 	return nil
 }
 
@@ -99,6 +101,7 @@ func (p *WebRTCPeer) SetAnswer(answerSDP string) error {
 
 // OnICECandidate sets up a handler for when ICE candidates are found
 // Called when we find a network path (send to browser)
+// Parameter is like a callback function. It is a function that is called when the event happens.
 func (p *WebRTCPeer) OnICECandidate(handler func(*webrtc.ICECandidate)) {
 	p.peerConnection.OnICECandidate(handler)
 }
@@ -114,4 +117,30 @@ func (p *WebRTCPeer) Close() error {
 		return p.peerConnection.Close()
 	}
 	return nil
+}
+
+// WriteRTPPacket writes an RTP packet object to the video track
+// This is used when you have an *rtp.Packet from the RTSP stream
+func (p *WebRTCPeer) WriteRTPPacket(packet *rtp.Packet) error {
+	if p.videoTrack == nil {
+		return fmt.Errorf("video track not created")
+	}
+
+	// Marshal the RTP packet to bytes
+	data, err := packet.Marshal()
+	if err != nil {
+		return fmt.Errorf("failed to marshal RTP packet: %w", err)
+	}
+
+	// Write the marshaled packet to the video track
+	_, err = p.videoTrack.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write packet to video track: %w", err)
+	}
+	return nil
+}
+
+// GetVideoTrack returns the video track
+func (p *WebRTCPeer) GetVideoTrack() *webrtc.TrackLocalStaticRTP {
+	return p.videoTrack
 }

@@ -10,6 +10,7 @@ import (
 	"camera-viewer/stream"
 
 	"github.com/joho/godotenv"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -33,6 +34,8 @@ func main() {
 	rtspUrl := fmt.Sprintf("rtsp://%s:%s@%s:%s/cam/realmonitor?channel=1&subtype=0", username, password, host, port)
 	
 	rtspStream = stream.NewRTSPStream(rtspUrl)
+	
+	// rtspStream is a pointer to the RTSPStream object but Go automatically dereferences it for us.
 	err = rtspStream.Connect()
 	if err != nil {
 		log.Fatalf("Failed to connect to RTSP stream: %v", err)
@@ -42,6 +45,10 @@ func main() {
 	defer rtspStream.Close()
 
 	log.Println("Connected to RTSP stream")
+	
+	// Get the detected codec from the RTSP stream
+	codec := rtspStream.GetCodec()
+	log.Printf("Camera is using codec: %s", codec)
 
 	webrtcPeer, err = stream.NewWebRTCPeer()
 	if err != nil {
@@ -50,12 +57,32 @@ func main() {
 	
 	defer webrtcPeer.Close()
 
-	err = webrtcPeer.CreateVideoTrack("video")
+	// Create video track with the appropriate codec
+	var codecMimeType string
+	if codec == "H264" {
+		codecMimeType = webrtc.MimeTypeH264
+	} else if codec == "H265" {
+		codecMimeType = webrtc.MimeTypeH265
+	} else {
+		log.Fatalf("Unsupported codec: %s", codec)
+	}
+	
+	err = webrtcPeer.CreateVideoTrack("video", codecMimeType)
 	if err != nil {
 		log.Fatalf("Failed to create video track: %v", err)
 	}
+	
+	// Set up packet handler AFTER creating the video track
+	// This handler will be called automatically for each RTP packet received from the camera
+	rtspStream.SetPacketHandler(func(packet *rtp.Packet) {
+		// Forward the packet to the WebRTC peer
+		err := webrtcPeer.WriteRTPPacket(packet)
+		if err != nil {
+			log.Printf("Failed to write packet to video track: %v", err)
+		}
+	})
 
-	// Set up connection state monitorung
+	// Set up connection state monitoring
 	webrtcPeer.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("Connection state changed: %s", state)
 	})
@@ -67,23 +94,40 @@ func main() {
 	})
 	
 	log.Println("WebRTC peer created and ready")
+	log.Println("Packets will be automatically forwarded from RTSP to WebRTC via callback")
 
-
-	http.HandleFunc("/", homeHandler)
-	http.HandleFunc("/api/offer", handleOffer)
-	http.HandleFunc("/api/answer", handleAnswer)
+	http.HandleFunc("/api/offer", corsMiddleware(handleOffer))
+	http.HandleFunc("/api/answer", corsMiddleware(handleAnswer))
 
 	fmt.Println("Starting server on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to the camera viewer!")
+// CORS middleware - allows requests from any origin
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Call the actual handler
+		next(w, r)
+	}
 }
+
 
 // Passing a pointer to the http.Request type since it is a complex object and therefore should be a pointer.
 // So the second param is a pointer of http.Request type.
 // ResponseWriter is an interface and by default interface are passed by reference and therefore we don't need to pass a pointer.
+// All HTTP handlers in Go MUST have this exact signature (http.ResponseWriter, *http.Request) - it's not your choice
+// r is a pointer: Yes, r points to the same http.Request object that the HTTP server created when the request came in
 func handleOffer(w http.ResponseWriter, r *http.Request) {
 	
 	if r.Method != http.MethodPost {

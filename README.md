@@ -1,10 +1,10 @@
 # Camera Viewer
 
-A Go + React application for viewing RTSP camera streams in the browser using WebRTC.
+A Go + HTML application for viewing RTSP camera streams in the browser using WebRTC.
 
 ## 🎯 What This Project Does
 
-Converts RTSP camera feeds to WebRTC for browser playback. Your Dahua NVR speaks RTSP, but browsers can't play RTSP directly - this Go backend acts as a bridge, converting RTSP to WebRTC so you can view your cameras in a React web app.
+Converts RTSP camera feeds to WebRTC for browser playback. Your Dahua NVR speaks RTSP, but browsers can't play RTSP directly - this Go backend acts as a bridge, converting RTSP to WebRTC so you can view your cameras in a HTML web app.
 
 ## 🏗️ Architecture
 ```
@@ -16,13 +16,13 @@ Camera (RTSP) → Go Backend (Converter) → Browser (WebRTC)
 1. **RTSP Connection**: Go backend connects to Dahua NVR via RTSP
 2. **RTP Packet Reading**: Receives raw video packets from camera
 3. **WebRTC Conversion**: Forwards packets to WebRTC peer connection
-4. **Browser Display**: React app displays video via WebRTC
+4. **Browser Display**: HTML app displays video via WebRTC
 
 ### Signaling Flow
 
 WebRTC requires a "handshake" to establish connections. We use HTTP endpoints for this:
 ```
-Browser (React)              Go Backend
+Browser (HTML)              Go Backend
 ---------------              ----------
 
 1. Request stream
@@ -85,7 +85,7 @@ The signaling mechanism is **separate** from WebRTC - it's just the handshake. O
   - `gorilla/websocket` - WebSocket support
   - `joho/godotenv` - Environment variable management
   
-- **Frontend**: React (coming soon)
+- **Frontend**: HTML
 
 ## **Putting It All Together**
 

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            background: #000;
+            border: 2px solid #333;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 5px;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Viewer Test</h1>
+    
+    <button id="startBtn">Start Stream</button>
+    <button id="stopBtn" disabled>Stop Stream</button>
+    
+    <div id="status">Status: Ready</div>
+    
+    <video id="video" autoplay playsinline controls></video>
+    
+    <script>
+        const video = document.getElementById('video');
+        const status = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        
+        let peerConnection = null;
+        
+        function updateStatus(msg) {
+            status.textContent = 'Status: ' + msg;
+            console.log(msg);
+        }
+        
+        startBtn.addEventListener('click', async () => {
+            try {
+                updateStatus('Creating peer connection...');
+                
+                // Create WebRTC peer connection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                // Handle incoming video track
+                peerConnection.ontrack = (event) => {
+                    updateStatus('Received video track!');
+                    video.srcObject = event.streams[0];
+                };
+                
+                // Handle ICE candidates
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('ICE candidate:', event.candidate);
+                    }
+                };
+                
+                // Monitor connection state
+                peerConnection.onconnectionstatechange = () => {
+                    updateStatus('Connection state: ' + peerConnection.connectionState);
+                };
+                
+                // Request offer from Go backend
+                updateStatus('Requesting offer from server...');
+                const offerResponse = await fetch('http://localhost:8080/api/offer', {
+                    method: 'POST'
+                });
+                const offerData = await offerResponse.json();
+                
+                updateStatus('Received offer, creating answer...');
+                
+                // Set remote description (the offer from Go)
+                await peerConnection.setRemoteDescription({
+                    type: 'offer',
+                    sdp: offerData.sdp
+                });
+                
+                // Create and set local description (our answer)
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Send answer back to Go backend
+                updateStatus('Sending answer to server...');
+                await fetch('http://localhost:8080/api/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'answer',
+                        sdp: answer.sdp
+                    })
+                });
+                
+                updateStatus('Connection established! Waiting for video...');
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+            } catch (error) {
+                updateStatus('Error: ' + error.message);
+                console.error(error);
+            }
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            video.srcObject = null;
+            updateStatus('Stopped');
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
